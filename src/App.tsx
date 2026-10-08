@@ -1,7 +1,59 @@
 import { FormEvent, useEffect, useState } from "react";
-import { getHolyDay, lunarPhases, sacredWeeks, seasons, weekdays, weeks } from "./calendar-data";
+import { getHolyDay, holyDays, lunarPhases, sacredWeeks, seasons, weekdays, weeks } from "./calendar-data";
 
 type TimelineEntry={year:string;date:string;title:string;type:string;place:string;characters:string;summary:string;outcome:string};
+
+function GodNames({gods,high=[]}:{gods:string[];high?:string[]}){
+  return <>{gods.map((god,index)=><span key={`${god}-${index}`} className={high.includes(god)?"high-god":""}>{index>0&&<i>、</i>}{god}</span>)}</>;
+}
+
+type DateMark={label:string;high:boolean};
+type DeityRow={god:string;seasons:DateMark[][]};
+
+function compactGodDates(god:string,seasonIndex:number):DateMark[]{
+  const sourceWeeks=seasonIndex===5?sacredWeeks:weeks;
+  const records=holyDays.filter(item=>item.season===seasonIndex&&item.gods?.includes(god));
+  if(!records.length)return [];
+  const isHigh=(day:number)=>records.find(item=>item.day===day)?.high?.includes(god)??false;
+  if(seasonIndex===5&&records.length===14&&records.every(item=>isHigh(item.day)===isHigh(records[0].day))){
+    return [{label:"全聖季期",high:isHigh(records[0].day)}];
+  }
+  const marks:DateMark[]=[];
+  sourceWeeks.forEach((week,weekIndex)=>{
+    const weekDays=records.filter(item=>Math.floor((item.day-1)/7)===weekIndex);
+    const statuses=weekDays.map(item=>isHigh(item.day));
+    if(weekDays.length===7&&statuses.every(value=>value===statuses[0])){
+      marks.push({label:`${week.zh}全週`,high:statuses[0]});
+      return;
+    }
+    weekDays.sort((a,b)=>a.day-b.day).forEach(item=>{
+      const weekday=weekdays[(item.day-1)%7];
+      marks.push({label:`${week.zh}/${weekday.zh}`,high:isHigh(item.day)});
+    });
+  });
+  return marks;
+}
+
+const deityRows:DeityRow[]=Array.from(new Set(holyDays.flatMap(item=>item.gods??[])))
+  .sort((a,b)=>a.localeCompare(b,"zh-Hant"))
+  .map(god=>({god,seasons:seasons.map((_,seasonIndex)=>compactGodDates(god,seasonIndex))}));
+
+function PrintDateGrid({sacred=false}:{sacred?:boolean}){
+  const sourceWeeks=sacred?sacredWeeks:weeks;
+  return <div className={`print-date-grid ${sacred?"sacred":"regular"}`}>
+    <div className="print-corner">週／日</div>
+    {weekdays.map(day=><div className="print-weekday" key={day.en}><i className="rune">{day.rune}</i><b>{day.zh}</b></div>)}
+    {sourceWeeks.map((week,weekIndex)=><div className="print-week-row" key={week.en}>
+      <div className="print-week-label"><i className="rune">{week.rune}</i><b>{week.zh}</b></div>
+      {weekdays.map((weekday,dayIndex)=>{
+        const day=weekIndex*7+dayIndex+1;
+        return <div className="print-date-cell" key={day}>
+          <strong>{day}</strong><span className="rune">{week.rune}{weekday.rune}</span>
+        </div>;
+      })}
+    </div>)}
+  </div>;
+}
 
 function parseCsv(text:string){
   const rows:string[][]=[];let row:string[]=[];let cell="";let quoted=false;
@@ -89,6 +141,10 @@ export default function Home(){
     loadTimeline(clean);
   }
 
+  function exportAllSeasons(){
+    window.print();
+  }
+
   return <main className="calendar-app">
     <header className="masthead">
       <div><h1>符文巡旅線上日曆工具</h1></div>
@@ -96,6 +152,7 @@ export default function Home(){
         <span className="legend-item"><i className="holy-dot"/>聖日</span>
         <span className="legend-item"><i className="holy-dot high"/>至高聖日</span>
         <a className="download-button" href="./downloads/RuneQuest-Chronicle-Template.xlsx" download>下載編年史 Excel</a>
+        <button className="pdf-export-button" type="button" onClick={exportAllSeasons}>輸出全部季節 PDF</button>
       </div>
     </header>
 
@@ -160,7 +217,7 @@ export default function Home(){
                 const high=!!info?.high?.length;
                 return <button key={day} className={`day-cell ${selectedDay===day?"selected":""}`} onClick={()=>setSelectedDay(day)} aria-label={`${seasonInfo.zh}第${day}日`}>
                   <span className="day-number">{day}</span>
-                  {info?.gods?.length?<div className="god-list">{info.gods.slice(0,3).map(g=><span key={g} className={info.high?.includes(g)?"high-god":""}>{g}</span>)}{info.gods.length>3&&<small>＋{info.gods.length-3}</small>}</div>:<span className="no-holiday">—</span>}
+                  {info?.gods?.length?<div className="god-list"><GodNames gods={info.gods} high={info.high}/></div>:<span className="no-holiday">—</span>}
                   {info?.event&&<em>{info.event}</em>}
                   {info&&<i className={`cell-marker ${high?"high":""}`}/>} 
                 </button>;
@@ -196,6 +253,27 @@ export default function Home(){
         <div className="date-nav"><button onClick={()=>setSelectedDay(Math.max(1,selectedDay-1))} disabled={selectedDay===1}>前一日</button><button onClick={()=>setSelectedDay(Math.min(seasonInfo.days,selectedDay+1))} disabled={selectedDay===seasonInfo.days}>後一日</button></div>
       </aside>
     </div>
+
+    <section className="print-calendar" aria-hidden="true">
+      <article className="print-page print-structure-page">
+        <header className="print-page-heading"><h2>曆法日期總表</h2><span>日期以「週符文＋星期符文」表示</span></header>
+        <div className="print-season-legend">
+          {[{rune:"w",label:"海洋季"},{rune:".",label:"火焰季"},{rune:"e",label:"大地季"},{rune:"o",label:"黑暗季"},{rune:"g",label:"風暴季"}].map(item=><span key={item.label}><i className="rune">{item.rune}</i><b>{item.label}</b></span>)}
+        </div>
+        <div className="print-lunar-strip"><strong>露娜月相</strong>{lunarPhases.map(phase=><span key={phase.en}><i className="rune">{phase.glyph}</i><b>{phase.zh}</b></span>)}</div>
+        <section className="print-grid-section"><h3>一般季節 · 56 日</h3><PrintDateGrid/></section>
+        <section className="print-grid-section sacred-section"><h3>聖季期 · 14 日</h3><PrintDateGrid sacred/></section>
+      </article>
+      <article className="print-page print-deity-page">
+        <header className="print-page-heading"><h2>神祇聖日速查表</h2><span>黑色：聖日　<span className="print-high-key">紅色：至高聖日</span></span></header>
+        <div className="deity-matrix-pair">
+          {[deityRows.slice(0,23),deityRows.slice(23)].map((rows,panelIndex)=><table className="deity-matrix" key={panelIndex}><thead><tr><th>神祇</th>{seasons.map(item=><th key={item.zh}>{item.zh}</th>)}</tr></thead>
+            <tbody>{rows.map(row=><tr key={row.god}><th>{row.god}</th>{row.seasons.map((marks,seasonIndex)=><td key={seasonIndex}>{marks.map((mark,index)=><span className={mark.high?"high-date-mark":""} key={`${mark.label}-${index}`}>{index>0&&<i>、</i>}<b>{mark.label}</b></span>)}</td>)}</tr>)}</tbody>
+          </table>)}
+        </div>
+        <footer>日期以「週／日」表示；「全週」表示該神祇於該週七日皆有聖日。</footer>
+      </article>
+    </section>
 
   </main>;
 }
