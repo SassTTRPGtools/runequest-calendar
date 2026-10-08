@@ -25,6 +25,7 @@ export default function Home(){
   const [timeline,setTimeline]=useState<TimelineEntry[]>([]);
   const [timelineLoading,setTimelineLoading]=useState(false);
   const [showTip,setShowTip]=useState(false);
+  const [dateCopied,setDateCopied]=useState(false);
   const seasonInfo=seasons[season];
   const selectedWeek=Math.floor((selectedDay-1)/7);
   const selectedWeekInfo=season===5?sacredWeeks[selectedWeek]:weeks[selectedWeek];
@@ -33,8 +34,14 @@ export default function Home(){
   const holy=getHolyDay(season,selectedDay);
   const highGods=holy?.high??[];
   const rowCount=season===5?2:8;
+  const dateRune=`${seasonInfo.rune}${selectedWeekInfo.rune}${"dateRune" in selectedWeekday?selectedWeekday.dateRune:selectedWeekday.rune}`;
+  const calendarDateText=`${seasonInfo.zh}/${selectedWeekInfo.zh}/${selectedWeekday.zh}`;
 
   function chooseSeason(index:number){setSeason(index);setSelectedDay(1)}
+  async function copyCalendarDate(){
+    await navigator.clipboard.writeText(`${dateRune} ${calendarDateText}`);
+    setDateCopied(true);window.setTimeout(()=>setDateCopied(false),1500);
+  }
   function goToTimelineDate(date:string){
     const seasonIndex=seasons.findIndex(item=>date.includes(item.zh));
     const weekSource=seasonIndex===5?sacredWeeks:weeks;
@@ -168,6 +175,11 @@ export default function Home(){
         <p className="date-overline">{seasonInfo.en}</p>
         <h2>{seasonInfo.zh}</h2>
         <div className="large-date"><strong>{selectedDay}</strong><span>日</span></div>
+
+        <button className="copy-date" type="button" onClick={copyCalendarDate} aria-label={`複製 ${calendarDateText}`}>
+          <span><b className="rune">{dateRune}</b><strong>{calendarDateText}</strong></span>
+          <small>{dateCopied?"已複製":"點擊複製"}</small>
+        </button>
 
         <dl className="rune-facts">
           <div><dt className="rune">{selectedWeekInfo.rune}</dt><dd><b>{selectedWeekInfo.zh}</b><small>{selectedWeekInfo.en}</small></dd></div>
